@@ -9,7 +9,7 @@ plain3 = "#    START     #".encode()
 plainX = "#     END      #".encode()
 plainStart = [plain1, plain2, plain3, plain2, plain1]
 plainEnd = [plain1, plain2, plainX, plain2, plain1]
-key = "INFO3616INFO3616" # I am not about to tell you!
+key = 'INFO3616INFO3616'.encode() # I am not about to tell you!
 
 cipher = AES.new(key, AES.MODE_ECB)
 
@@ -23,8 +23,7 @@ def run_xor(b1, b2):
 
     for i in range(0, len(b1)):
         x = b1[i] ^ b2[i]
-        t = "%x" % x #convert decimal to hex
-
+        t = "%x" % x
         if len(t) == 1:
             t = "0" + t
         output.append(t)
@@ -52,58 +51,50 @@ def encrypt_input_file(filename):
 
 
 def break_input_file(filename):
-    emptyByte = b'\x00'
-    emptyStream = emptyByte + emptyByte + emptyByte + emptyByte + emptyByte + emptyByte + emptyByte + emptyByte + emptyByte + emptyByte + emptyByte + emptyByte + emptyByte + emptyByte + emptyByte + emptyByte
-    #print(emptyStream)
 
-    nonce = "0000000000000000"
-    enc_nonce = cipher.encrypt(nonce.encode())
-    print("Encrypted nonce: ",enc_nonce)
-    data = "this is a tet!@#"
-    print("Data: ",data)
-    #encoded_data = run_xor(enc_nonce,data.encode())
-    encoded_data = "4057562b7defa5579e65a89c7d75be51"
-    #encoded_data = "70e0e190d80210e37527246b67e7d488"
-    print("encoded unhexed: ", encoded_data)
-    enc_data = binascii.unhexlify(encoded_data)
-    print("Encrypted Data: ", enc_data)
+      #Define arbitrary number based on nonce modulus generation
+    nBlocks = 10
 
+    #Read input file
+    infh = open(filename,"r").readlines()
 
-    unenc_data = binascii.unhexlify(run_xor(enc_nonce,enc_data))
-    print("Unencrypted Data: ",unenc_data)
+    #Declare variables for storing data, pointers, and keys
+    matched = [[0 for x in range(int(len(infh)/nBlocks))] for y in range(nBlocks)]
+    pointers = [0 for x in range(len(matched))]
+    encryptedNonces = [0 for x in range(len(matched))]
 
-    with open(filename, "r") as infh, open("unencrypted.enc", "w") as outfh:
-        i = 0
-        for line in infh:
-            line = line.rstrip("\n")[2:]
-        #    print(line)
-            line = binascii.unhexlify(line)
-            print("-----------------")
-            print(line)
+    i = 0
+    for line in infh:
+        firstChar = int(line[0])
+        line = binascii.unhexlify(line.rstrip("\n")[2:]) #Clean input and format as bytes
+        matched[firstChar][pointers[firstChar]] = line #Store in blocks based on line number
+        pointers[firstChar] = pointers[firstChar]+1 #Update block line pointer
+        i = (i + 1) % nBlocks
 
-            nonce = "000000000000000" + str(i)
+    #Find the nonce encryption key for the first n/2 lines (given known start)
+    for i in range(int(nBlocks/2)):
+        nonce = "000000000000000" + str(i)
+        encryptedNonces[i] = binascii.unhexlify(run_xor(matched[i][0],plainStart[i])) #Find encrypted nonce using xor 'reversal' of known input and encrypted output
+        #print("Key " + str(i) + " :" + str(encryptedNonces[i]))
 
-            enc_nonce =
-            #enc_nonce = cipher.encrypt(nonce.encode())
+    #Find the nonce encryption key for the final n/2 lines (given known end)
+    for i in range(int(nBlocks/2)):
+        nonce = "000000000000000" + str(i+int(nBlocks/2))
+        encryptedNonces[i+int(nBlocks/2)] = binascii.unhexlify(run_xor(matched[i+int(nBlocks/2)][int(len(infh)/nBlocks)-1],plainEnd[i])) #Find encrypted nonce using xor 'reversal' of known input and encrypted output
+        #print("Key " + str(i+5) + " :" + str(encryptedNonces[i+5]))
 
-            res = binascii.unhexlify(run_xor(enc_nonce,line))
+    #Decrypt lines using appropriate keys
+    for i in range(len(matched)):
+        for j in range(len(matched[i])):
+            matched[i][j] = binascii.unhexlify(run_xor(encryptedNonces[i],matched[i][j])).decode() #Find unencrypted input using xor 'reversal' of encrypted out and encrypted nonce
+            #print("UN: " + matched[i][j])
 
-            print(res)
-
-            #outfh.write(str(i) + "," + res + "\n")
-            i = (i + 1) % 10
-
-
-    #print(enc_nonce)
-    # plain = "abcdefghijklmnop"
-    # print(plain)
-    # encrypted = transcrypt(nonce.encode(), plain.encode());
-    # #THIS IS WHAT WE TRY TO DECODE
-    # print(encrypted)
-    #
-    # encryptionOut = run_xor(enc_nonce,emptyStream)
-    # print(encryptionOut)
-    # print(run_xor(encrypted.encode(),encryptionOut.encode()))
+    #Print the decrypted lines in order, and to file
+    outfh = open("unencrypted.enc", "w")
+    for j in range(len(matched[0])):
+        for i in range(len(matched)):
+            outfh.write(matched[i][j] + "\n")
+            print(matched[i][j])
 
     pass
 
